@@ -20,12 +20,19 @@
 #define PORT "3114"
 // doit être un char*
 #define MAX_LOG 5
+#define MAX_NUMBER_CLIENT 5
 
-typedef struct ThreadArgs {
+typedef struct ThreadArgsClient {
     int connfd;
     int thread_id;
     Queue* queue;
-} ThreadArgs;
+} ThreadArgsClient;
+
+typedef struct ThreadArgsWatch {
+    Queue* queue;
+    int* connfd_list;
+    unsigned int* connfd_size;
+} ThreadArgsWatch;
 
 void print_ascii(const char *data, int len) {
     for (int i = 0; i < len; i++) {
@@ -50,7 +57,7 @@ void remove_trailing_non_printable(char* string, int len) {
 }
 
 void* handle_client(void* arg) {
-    ThreadArgs* args = (ThreadArgs*)arg;
+    ThreadArgsClient* args = (ThreadArgsClient*)arg;
     int connfd = args->connfd;
     int thread_id = args->thread_id;
     Queue* queue = args->queue;
@@ -81,16 +88,30 @@ void* handle_client(void* arg) {
 
     printf("thread %d : fin de la connexion\n", thread_id);
     close(connfd); // on ferme la connexion
+    free(args);
     return NULL;
 }
 
 void* watch_queue(void* arg) {
-    Queue* queue = (Queue*)arg;
+    char to_send[MAX_SIZE_MESSAGE];
+    memset(to_send, '\0', MAX_SIZE_MESSAGE);
+
+    ThreadArgsWatch* args = (ThreadArgsWatch*)arg;
+    Queue* queue = args->queue;
+    int* connfd_list = args->connfd_list;
     while (1) {
         if (!queueIsEmpty(queue)) {
             Message message = queueRemove(queue);
-            printf("%s : ", message.name);
-            print_ascii(message.buf, strlen(message.buf));
+            
+            for (int i = 0; i < *args->connfd_size; i++) {
+                int connfd = connfd_list[i];
+                strcpy(to_send, message.name);
+                strcat(to_send, " : ");
+                strcat(to_send, message.buf);
+                strcat(to_send, "\n");
+
+                send(connfd, to_send, strlen(to_send), 0);
+            }
         }
     }
     return NULL;
@@ -99,26 +120,25 @@ void* watch_queue(void* arg) {
 int main() {
     int sockfd, connfd;
     // listen sur sockfd et accept les nouvelles connexions sur connfd
+
     struct addrinfo hints, *servinfo, *p;
     // hints pour avoir infos sur soi-même, qui vont aller dans ervinfo
     // p va servir à parcourir les servinfo proposés pour voir lequel on arrive à bind
-    struct sockaddr_storage client_sa;
-    // storage pour avoir la place pour les 2 types (ipv4 et 6)
-    socklen_t sin_size;
-    // taille de l'adresse du client
-    int yes = 1;
-    // pour la fonction qui vérifie si le port est libre
+
+    struct sockaddr_storage client_sa; // storage pour avoir la place pour les 2 types (ipv4 et 6)
+    socklen_t sin_size; // taille de l'adresse du client
+    int yes = 1; // pour la fonction qui vérifie si le port est libre
+
     void* client_in_address;
     char client_ip[INET6_ADDRSTRLEN];
-    int rv;
-    // retour de getaddrinfo pour afficher les erreurs
-    char message[MAX_SIZE_MESSAGE];
-    memset(message, '\0', MAX_SIZE_MESSAGE);
-    char buf[MAX_SIZE_MESSAGE];
-    memset(buf, '\0', MAX_SIZE_MESSAGE);
-    int bytes_recus;
+    int rv; // retour de getaddrinfo pour afficher les erreurs
 
     Queue* queue = queueCreate(10);
+
+    int* connfd_list = malloc(MAX_NUMBER_CLIENT * sizeof(int));
+    unsigned int* connfd_size = malloc(sizeof(unsigned int));
+    *connfd_size = 0;
+    int thread_id = 0;
 
     memset(&hints, 0, sizeof hints); // on nettoie hints
     hints.ai_family = AF_UNSPEC; // ipv4 ou 6
@@ -163,8 +183,12 @@ int main() {
         exit(1);
     }
 
+    ThreadArgsWatch* args_watch = malloc(sizeof(ThreadArgsWatch));
+    args_watch->queue = queue;
+    args_watch->connfd_list = connfd_list;
+    args_watch->connfd_size = connfd_size;
     pthread_t watch_thread;
-    pthread_create(&watch_thread, NULL, watch_queue, queue);
+    pthread_create(&watch_thread, NULL, watch_queue, args_watch);
 
     printf("en attente de connexion...\n");
     while (1) {
@@ -186,10 +210,18 @@ int main() {
         inet_ntop(client_sa.ss_family, client_in_address, client_ip, sizeof client_ip);
         printf("%s s'est connecté\n", client_ip);
 
+        if (*connfd_size >= MAX_NUMBER_CLIENT) {
+            printf("nombre maximal de clients atteint\n");
+            close(connfd);
+            continue;
+        }
+        connfd_list[*connfd_size] = connfd;
+        (*connfd_size)++;
+
         pthread_t thread;
-        ThreadArgs* args = malloc(sizeof(ThreadArgs));
+        ThreadArgsClient* args = malloc(sizeof(ThreadArgsClient));
         args->connfd = connfd;
-        args->thread_id = 0;
+        args->thread_id = thread_id++;
         args->queue = queue;
         pthread_create(&thread, NULL, handle_client, args);
     }
@@ -198,6 +230,10 @@ int main() {
     pthread_join(watch_thread, NULL);
 
     queueDestroy(queue);
+
+    free(connfd_list);
+    free(connfd_size);
+    free(args_watch);
 
     return 0;
 }
