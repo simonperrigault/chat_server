@@ -138,8 +138,37 @@ CMakeFiles/server.dir/server.c.o: /home/simonp/entrainemnt/c/socket_tuto/server.
   /usr/include/x86_64-linux-gnu/bits/netdb.h \
   /usr/include/arpa/inet.h \
   /usr/include/ctype.h \
+  /usr/include/pthread.h \
+  /usr/include/sched.h \
+  /usr/include/x86_64-linux-gnu/bits/sched.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_sched_param.h \
+  /usr/include/x86_64-linux-gnu/bits/cpu-set.h \
+  /usr/include/time.h \
+  /usr/include/x86_64-linux-gnu/bits/time.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_tm.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct_itimerspec.h \
+  /usr/include/x86_64-linux-gnu/bits/setjmp.h \
+  /usr/include/x86_64-linux-gnu/bits/types/struct___jmp_buf_tag.h \
+  /usr/include/x86_64-linux-gnu/bits/pthread_stack_min-dynamic.h \
+  /usr/include/x86_64-linux-gnu/bits/pthread_stack_min.h \
   /home/simonp/entrainemnt/c/socket_tuto/queue.h
 
+
+/usr/include/x86_64-linux-gnu/bits/setjmp.h:
+
+/usr/include/x86_64-linux-gnu/bits/types/struct_itimerspec.h:
+
+/usr/include/time.h:
+
+/usr/include/x86_64-linux-gnu/bits/types/struct_sched_param.h:
+
+/usr/include/x86_64-linux-gnu/bits/sched.h:
+
+/usr/include/sched.h:
+
+/usr/include/pthread.h:
+
+/usr/include/x86_64-linux-gnu/bits/time.h:
 
 /usr/include/x86_64-linux-gnu/bits/netdb.h:
 
@@ -154,6 +183,8 @@ CMakeFiles/server.dir/server.c.o: /home/simonp/entrainemnt/c/socket_tuto/server.
 /usr/include/x86_64-linux-gnu/bits/types/struct_osockaddr.h:
 
 /usr/include/asm-generic/sockios.h:
+
+/usr/include/x86_64-linux-gnu/bits/cpu-set.h:
 
 /usr/include/x86_64-linux-gnu/asm/posix_types_64.h:
 
@@ -196,6 +227,8 @@ CMakeFiles/server.dir/server.c.o: /home/simonp/entrainemnt/c/socket_tuto/server.
 /usr/include/x86_64-linux-gnu/sys/types.h:
 
 /usr/lib/gcc/x86_64-linux-gnu/12/include/stdarg.h:
+
+/usr/include/x86_64-linux-gnu/bits/types/struct___jmp_buf_tag.h:
 
 /usr/include/x86_64-linux-gnu/bits/types/clockid_t.h:
 
@@ -241,7 +274,11 @@ CMakeFiles/server.dir/server.c.o: /home/simonp/entrainemnt/c/socket_tuto/server.
 
 /usr/include/features.h:
 
+/usr/include/x86_64-linux-gnu/bits/types/struct_tm.h:
+
 /usr/include/x86_64-linux-gnu/bits/types/FILE.h:
+
+/usr/include/x86_64-linux-gnu/bits/pthread_stack_min-dynamic.h:
 
 /usr/include/asm-generic/socket.h:
 
@@ -318,6 +355,8 @@ CMakeFiles/server.dir/server.c.o: /home/simonp/entrainemnt/c/socket_tuto/server.
 /usr/include/x86_64-linux-gnu/bits/getopt_posix.h:
 
 /usr/include/stdio.h:
+
+/usr/include/x86_64-linux-gnu/bits/pthread_stack_min.h:
 
 /usr/include/x86_64-linux-gnu/bits/types/struct_timespec.h:
 

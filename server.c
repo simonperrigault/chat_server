@@ -54,25 +54,26 @@ void* handle_client(void* arg) {
     int connfd = args->connfd;
     int thread_id = args->thread_id;
     Queue* queue = args->queue;
+
     char name[MAX_SIZE_NAME];
     memset(name, '\0', MAX_SIZE_NAME);
+    snprintf(name, MAX_SIZE_NAME, "client %d", thread_id);
+
     char buf[MAX_SIZE_MESSAGE];
     memset(buf, '\0', MAX_SIZE_MESSAGE);
     int bytes_recus;
 
     printf("thread %d : connexion faite\n", thread_id);
 
-    strcpy(name, "client");
-    strcat(name, thread_id+'0');
-
     while ((bytes_recus = recv(connfd, buf, MAX_SIZE_MESSAGE-1, 0)) > 0) {
         remove_trailing_non_printable(buf, bytes_recus);
 
         printf("thread %d : reception de ", thread_id);
-        print_ascii(buf, bytes_recus);
-        printf("\n");
+        print_ascii(buf, strlen(buf));
 
-        Message message = {name, buf};
+        Message message;
+        strcpy(message.name, name);
+        strcpy(message.buf, buf);
         queueAdd(queue, message);
         
         memset(buf, '\0', MAX_SIZE_MESSAGE);
@@ -80,6 +81,18 @@ void* handle_client(void* arg) {
 
     printf("thread %d : fin de la connexion\n", thread_id);
     close(connfd); // on ferme la connexion
+    return NULL;
+}
+
+void* watch_queue(void* arg) {
+    Queue* queue = (Queue*)arg;
+    while (1) {
+        if (!queueIsEmpty(queue)) {
+            Message message = queueRemove(queue);
+            printf("%s : ", message.name);
+            print_ascii(message.buf, strlen(message.buf));
+        }
+    }
     return NULL;
 }
 
@@ -104,6 +117,8 @@ int main() {
     char buf[MAX_SIZE_MESSAGE];
     memset(buf, '\0', MAX_SIZE_MESSAGE);
     int bytes_recus;
+
+    Queue* queue = queueCreate(10);
 
     memset(&hints, 0, sizeof hints); // on nettoie hints
     hints.ai_family = AF_UNSPEC; // ipv4 ou 6
@@ -148,6 +163,9 @@ int main() {
         exit(1);
     }
 
+    pthread_t watch_thread;
+    pthread_create(&watch_thread, NULL, watch_queue, queue);
+
     printf("en attente de connexion...\n");
     while (1) {
         sin_size = sizeof client_sa;
@@ -168,45 +186,18 @@ int main() {
         inet_ntop(client_sa.ss_family, client_in_address, client_ip, sizeof client_ip);
         printf("%s s'est connecté\n", client_ip);
 
-        if (!fork()) {
-            // on est dans le child
-            close(sockfd); // plus besoin
-            // on envoie un message
-            memset(message, '\0', MAX_SIZE_MESSAGE);
-            strcpy(message, "conn\n");
-            int size = strlen(message);
-            if (send(connfd, message, size, 0) == -1) {
-                perror("erreur pendant send");
-            }
-
-            while ((bytes_recus = recv(connfd, buf, MAX_SIZE_MESSAGE-1, 0)) > 0) {
-                remove_trailing_non_printable(buf, bytes_recus);
-                printf("reception de \"%s\"\n", buf);
-                memset(message, '\0', MAX_SIZE_MESSAGE);
-                strcpy(message, "-> ");
-                strncat(message, buf, MAX_SIZE_MESSAGE-strlen(message)-1);
-                strcat(message, "\n");
-                size = strlen(message);
-                if (send(connfd, message, size, 0) == -1) {
-                    perror("erreur pendant send");
-                }
-                if (strcmp(buf, "exit") == 0) {
-                    memset(message, '\0', MAX_SIZE_MESSAGE);
-                    strcpy(message, "fin con\n");
-                    size = strlen(message);
-                    if (send(connfd, message, size, 0) == -1) {
-                        perror("erreur pendant send");
-                    }
-                    break;
-                }
-                memset(buf, '\0', MAX_SIZE_MESSAGE);
-            }
-            printf("fin de la connexion avec %s", client_ip);
-            close(connfd); // on ferme la connexion
-            exit(0); // child se termine;
-        }
-        close(connfd); // parent a pas besoin
+        pthread_t thread;
+        ThreadArgs* args = malloc(sizeof(ThreadArgs));
+        args->connfd = connfd;
+        args->thread_id = 0;
+        args->queue = queue;
+        pthread_create(&thread, NULL, handle_client, args);
     }
+
+    pthread_cancel(watch_thread);
+    pthread_join(watch_thread, NULL);
+
+    queueDestroy(queue);
 
     return 0;
 }

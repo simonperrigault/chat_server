@@ -3,7 +3,7 @@
 
 typedef struct Message {
     char name[MAX_SIZE_NAME];
-    char message[MAX_SIZE_MESSAGE];
+    char buf[MAX_SIZE_MESSAGE];
 } Message;
 
 typedef struct Queue {
