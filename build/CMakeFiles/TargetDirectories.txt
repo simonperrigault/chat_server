@@ -1,0 +1,4 @@
+/home/simonp/entrainemnt/c/socket_tuto/build/CMakeFiles/server.dir
+/home/simonp/entrainemnt/c/socket_tuto/build/CMakeFiles/client.dir
+/home/simonp/entrainemnt/c/socket_tuto/build/CMakeFiles/edit_cache.dir
+/home/simonp/entrainemnt/c/socket_tuto/build/CMakeFiles/rebuild_cache.dir
