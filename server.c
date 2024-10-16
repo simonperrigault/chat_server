@@ -22,17 +22,17 @@
 #define MAX_LOG 5
 #define MAX_NUMBER_CLIENT 5
 
-typedef struct ThreadArgsClient {
+struct ThreadArgsClient {
     int connfd;
     int thread_id;
     Queue* queue;
-} ThreadArgsClient;
+};
 
-typedef struct ThreadArgsWatch {
+struct ThreadArgsWatch {
     Queue* queue;
     int* connfd_list;
     unsigned int* connfd_size;
-} ThreadArgsWatch;
+};
 
 void print_ascii(const char *data, int len) {
     for (int i = 0; i < len; i++) {
@@ -57,33 +57,27 @@ void remove_trailing_non_printable(char* string, int len) {
 }
 
 void* handle_client(void* arg) {
-    ThreadArgsClient* args = (ThreadArgsClient*)arg;
+    struct ThreadArgsClient* args = (struct ThreadArgsClient*)arg;
     int connfd = args->connfd;
     int thread_id = args->thread_id;
     Queue* queue = args->queue;
 
-    char name[MAX_SIZE_NAME];
-    memset(name, '\0', MAX_SIZE_NAME);
-    snprintf(name, MAX_SIZE_NAME, "client %d", thread_id);
-
-    char buf[MAX_SIZE_MESSAGE];
-    memset(buf, '\0', MAX_SIZE_MESSAGE);
+    char buf[MAX_SIZE_MESSAGE+MAX_SIZE_NAME];
+    memset(buf, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
     int bytes_recus;
 
     printf("thread %d : connexion faite\n", thread_id);
 
-    while ((bytes_recus = recv(connfd, buf, MAX_SIZE_MESSAGE-1, 0)) > 0) {
-        remove_trailing_non_printable(buf, bytes_recus);
-
+    while ((bytes_recus = recv(connfd, buf, MAX_SIZE_MESSAGE+MAX_SIZE_NAME, 0)) > 0) {
         printf("thread %d : reception de ", thread_id);
-        print_ascii(buf, strlen(buf));
+        print_ascii(buf, bytes_recus);
 
         Message message;
-        strcpy(message.name, name);
-        strcpy(message.buf, buf);
+        strncpy(message.name, buf, MAX_SIZE_NAME);
+        strncpy(message.buf, buf+MAX_SIZE_NAME, MAX_SIZE_MESSAGE);
         queueAdd(queue, message);
         
-        memset(buf, '\0', MAX_SIZE_MESSAGE);
+        memset(buf, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
     }
 
     printf("thread %d : fin de la connexion\n", thread_id);
@@ -93,24 +87,23 @@ void* handle_client(void* arg) {
 }
 
 void* watch_queue(void* arg) {
-    char to_send[MAX_SIZE_MESSAGE];
-    memset(to_send, '\0', MAX_SIZE_MESSAGE);
+    char to_send[MAX_SIZE_MESSAGE+MAX_SIZE_NAME];
+    memset(to_send, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
 
-    ThreadArgsWatch* args = (ThreadArgsWatch*)arg;
+    struct ThreadArgsWatch* args = (struct ThreadArgsWatch*)arg;
     Queue* queue = args->queue;
     int* connfd_list = args->connfd_list;
     while (1) {
         if (!queueIsEmpty(queue)) {
             Message message = queueRemove(queue);
+
+            memset(to_send, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
+            strncpy(to_send, message.name, MAX_SIZE_NAME);
+            strncpy(to_send+MAX_SIZE_NAME, message.buf, MAX_SIZE_MESSAGE);
             
             for (int i = 0; i < *args->connfd_size; i++) {
                 int connfd = connfd_list[i];
-                strcpy(to_send, message.name);
-                strcat(to_send, " : ");
-                strcat(to_send, message.buf);
-                strcat(to_send, "\n");
-
-                send(connfd, to_send, strlen(to_send), 0);
+                send(connfd, to_send, MAX_SIZE_MESSAGE+MAX_SIZE_NAME, 0);
             }
         }
     }
@@ -183,7 +176,7 @@ int main() {
         exit(1);
     }
 
-    ThreadArgsWatch* args_watch = malloc(sizeof(ThreadArgsWatch));
+    struct ThreadArgsWatch* args_watch = malloc(sizeof(struct ThreadArgsWatch));
     args_watch->queue = queue;
     args_watch->connfd_list = connfd_list;
     args_watch->connfd_size = connfd_size;
@@ -219,7 +212,7 @@ int main() {
         (*connfd_size)++;
 
         pthread_t thread;
-        ThreadArgsClient* args = malloc(sizeof(ThreadArgsClient));
+        struct ThreadArgsClient* args = malloc(sizeof(struct ThreadArgsClient));
         args->connfd = connfd;
         args->thread_id = thread_id++;
         args->queue = queue;

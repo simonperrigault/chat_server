@@ -11,10 +11,52 @@
 #include <netinet/in.h> // struct sockaddr_in[6]
 #include <netdb.h> // addrinfo
 #include <arpa/inet.h> // htons
+#include <pthread.h>
 
 #include "queue.h"
 
 #define PORT "3114"
+
+struct ThreadArgsRecv {
+    int sockfd;
+};
+
+struct ThreadArgsSend {
+    int sockfd;
+};
+
+void* handle_recv(void* arg) {
+    struct ThreadArgsRecv* args = (struct ThreadArgsRecv*) arg;
+    int sockfd = args->sockfd;
+
+    char name[MAX_SIZE_NAME];
+    memset(name, '\0', MAX_SIZE_NAME);
+    char message[MAX_SIZE_MESSAGE];
+    memset(message, '\0', MAX_SIZE_MESSAGE);
+
+    char buf[MAX_SIZE_MESSAGE+MAX_SIZE_NAME];
+    memset(buf, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
+
+    int error = 0;
+    socklen_t len = sizeof (error);
+
+    while (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len) == 0 &&
+            error == 0 && 
+            strcmp(message, "exit") != 0) {
+        recv(sockfd, buf, MAX_SIZE_MESSAGE+MAX_SIZE_NAME, 0);
+        strncpy(name, buf, MAX_SIZE_NAME);
+        strncpy(message, buf+MAX_SIZE_NAME, MAX_SIZE_MESSAGE);
+        printf("%s : %s\n", name, message);
+
+        memset(buf, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
+    }
+
+    return NULL;
+}
+
+void* handle_send(void* arg) {
+    return NULL;
+}
 
 int main(int argc, char* argv[]) {
     int sockfd;
@@ -65,7 +107,21 @@ int main(int argc, char* argv[]) {
 
     freeaddrinfo(server_addr);
 
-    send(sockfd, "salut", 5, 0);
+    pthread_t thread_send, thread_recv;
+
+    struct ThreadArgsSend* args_send = (struct ThreadArgsSend*)malloc(sizeof(struct ThreadArgsSend));
+    args_send->sockfd = sockfd;
+    pthread_create(&thread_send, NULL, handle_send, args_send);
+
+    struct ThreadArgsRecv* args_recv = (struct ThreadArgsRecv*)malloc(sizeof(struct ThreadArgsRecv));
+    args_recv->sockfd = sockfd;
+    pthread_create(&thread_recv, NULL, handle_recv, args_recv);
+
+    send(sockfd, "Simon\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0salut", 26, 0);
+
+    pthread_join(thread_recv, NULL);
+    pthread_cancel(thread_send);
+    pthread_join(thread_send, NULL);
 
     close(sockfd);
 
