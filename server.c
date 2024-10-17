@@ -15,24 +15,12 @@
 #include <ctype.h> // pour print_ascii()
 #include <pthread.h>
 
-#include "queue.h"
-
 #define PORT "3114"
 // doit être un char*
 #define MAX_LOG 5
-#define MAX_NUMBER_CLIENT 5
-
-struct ThreadArgsClient {
-    int connfd;
-    int thread_id;
-    Queue* queue;
-};
-
-struct ThreadArgsWatch {
-    Queue* queue;
-    int* connfd_list;
-    unsigned int* connfd_size;
-};
+#define MAX_NUMBER_CLIENTS 10
+#define MAX_SIZE_MESSAGE 100
+#define MAX_SIZE_NAME 20
 
 void print_ascii(const char *data, int len) {
     for (int i = 0; i < len; i++) {
@@ -45,93 +33,93 @@ void print_ascii(const char *data, int len) {
     printf("\n");
 }
 
-void remove_trailing_non_printable(char* string, int len) {
-    int i = len;
-    while (i > 0) {
-        if (string[i] != '\r' && string[i] != '\n' && string[i] != '\0') {
-            return;
-        }
-        string[i] = '\0';
-        i--;
-    }
-}
+// void* handle_client(void* arg) {
+//     struct ThreadArgsClient* args = (struct ThreadArgsClient*)arg;
+//     int newfd = args->newfd;
+//     int thread_id = args->thread_id;
+//     Queue* queue = args->queue;
 
-void* handle_client(void* arg) {
-    struct ThreadArgsClient* args = (struct ThreadArgsClient*)arg;
-    int connfd = args->connfd;
-    int thread_id = args->thread_id;
-    Queue* queue = args->queue;
+//     char buf[MAX_SIZE_MESSAGE+MAX_SIZE_NAME];
+//     memset(buf, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
+//     int bytes_recus;
 
-    char buf[MAX_SIZE_MESSAGE+MAX_SIZE_NAME];
-    memset(buf, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
-    int bytes_recus;
+//     printf("sockfd %d : connexion faite\n", newfd);
 
-    printf("thread %d : connexion faite\n", thread_id);
+//     while ((bytes_recus = recv(newfd, buf, MAX_SIZE_MESSAGE+MAX_SIZE_NAME, 0)) > 0) {
+//         printf("sockfd %d : reception de ", newfd);
+//         print_ascii(buf, bytes_recus);
 
-    while ((bytes_recus = recv(connfd, buf, MAX_SIZE_MESSAGE+MAX_SIZE_NAME, 0)) > 0) {
-        printf("thread %d : reception de ", thread_id);
-        print_ascii(buf, bytes_recus);
-
-        Message message;
-        strncpy(message.name, buf, MAX_SIZE_NAME);
-        strncpy(message.buf, buf+MAX_SIZE_NAME, MAX_SIZE_MESSAGE);
-        queueAdd(queue, message);
+//         Message message;
+//         strncpy(message.name, buf, MAX_SIZE_NAME);
+//         strncpy(message.buf, buf+MAX_SIZE_NAME, MAX_SIZE_MESSAGE);
+//         queueAdd(queue, message);
         
-        memset(buf, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
-    }
+//         memset(buf, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
+//     }
 
-    printf("thread %d : fin de la connexion\n", thread_id);
-    close(connfd); // on ferme la connexion
-    free(args);
-    return NULL;
-}
+//     printf("sockfd %d : fin de la connexion\n", newfd);
+//     close(newfd); // on ferme la connexion
+//     free(args);
+//     return NULL;
+// }
 
-void* watch_queue(void* arg) {
-    char to_send[MAX_SIZE_MESSAGE+MAX_SIZE_NAME];
-    memset(to_send, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
+// void* watch_queue(void* arg) {
+//     char to_send[MAX_SIZE_MESSAGE+MAX_SIZE_NAME];
+//     memset(to_send, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
 
-    struct ThreadArgsWatch* args = (struct ThreadArgsWatch*)arg;
-    Queue* queue = args->queue;
-    int* connfd_list = args->connfd_list;
-    while (1) {
-        if (!queueIsEmpty(queue)) {
-            Message message = queueRemove(queue);
+//     struct ThreadArgsWatch* args = (struct ThreadArgsWatch*)arg;
+//     Queue* queue = args->queue;
+//     int* newfd_list = args->newfd_list;
+//     while (1) {
+//         if (!queueIsEmpty(queue)) {
+//             Message message = queueRemove(queue);
 
-            memset(to_send, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
-            strncpy(to_send, message.name, MAX_SIZE_NAME);
-            strncpy(to_send+MAX_SIZE_NAME, message.buf, MAX_SIZE_MESSAGE);
+//             memset(to_send, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
+//             strncpy(to_send, message.name, MAX_SIZE_NAME);
+//             strncpy(to_send+MAX_SIZE_NAME, message.buf, MAX_SIZE_MESSAGE);
             
-            for (int i = 0; i < *args->connfd_size; i++) {
-                int connfd = connfd_list[i];
-                send(connfd, to_send, MAX_SIZE_MESSAGE+MAX_SIZE_NAME, 0);
-            }
-        }
+//             for (int i = 0; i < *args->newfd_size; i++) {
+//                 int newfd = newfd_list[i];
+//                 send(newfd, to_send, MAX_SIZE_MESSAGE+MAX_SIZE_NAME, 0);
+//                 printf("envoi de ");
+//                 print_ascii(to_send, MAX_SIZE_NAME+MAX_SIZE_MESSAGE);
+//             }
+//         }
+//     }
+//     return NULL;
+// }
+
+void *get_in_addr(struct sockaddr *sa)
+{
+    if (sa->sa_family == AF_INET) {
+        return &(((struct sockaddr_in*)sa)->sin_addr);
     }
-    return NULL;
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
 int main() {
-    int sockfd, connfd;
-    // listen sur sockfd et accept les nouvelles connexions sur connfd
+    int listener, newfd;
+    // listen sur listener et accept les nouvelles connexions sur newfd
 
     struct addrinfo hints, *servinfo, *p;
     // hints pour avoir infos sur soi-même, qui vont aller dans ervinfo
     // p va servir à parcourir les servinfo proposés pour voir lequel on arrive à bind
 
-    struct sockaddr_storage client_sa; // storage pour avoir la place pour les 2 types (ipv4 et 6)
-    socklen_t sin_size; // taille de l'adresse du client
+    struct sockaddr_storage remoteaddr; // storage pour avoir la place pour les 2 types (ipv4 et 6)
+    socklen_t addrlen; // taille de l'adresse du client
     int yes = 1; // pour la fonction qui vérifie si le port est libre
 
-    void* client_in_address;
-    char client_ip[INET6_ADDRSTRLEN];
+    char remoteIP[INET6_ADDRSTRLEN];
     int rv; // retour de getaddrinfo pour afficher les erreurs
 
-    Queue* queue = queueCreate(10);
+    char buf[MAX_SIZE_NAME+MAX_SIZE_MESSAGE];
+    memset(buf, '\0', MAX_SIZE_NAME+MAX_SIZE_MESSAGE);
 
-    int* connfd_list = malloc(MAX_NUMBER_CLIENT * sizeof(int));
-    unsigned int* connfd_size = malloc(sizeof(unsigned int));
-    *connfd_size = 0;
-    int thread_id = 0;
+    fd_set all_fds, read_fds;
+    int fdmax = 0;
+    unsigned int number_clients = 0;
+    FD_ZERO(&all_fds); // clear les sets
+    FD_ZERO(&read_fds);
 
     memset(&hints, 0, sizeof hints); // on nettoie hints
     hints.ai_family = AF_UNSPEC; // ipv4 ou 6
@@ -145,18 +133,18 @@ int main() {
 
     // on parcourt la linked list jusqu'à réussir à bind l'adresse
     for (p = servinfo; p != NULL; p = p->ai_next) {
-        if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+        if ((listener = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
             perror("erreur pendant socket");
             continue;
         }
-        if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+        if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
             // on dit qu'on veut utiliser le port
             // marchera si on redémarre
             perror("port déjà utilisé");
             exit(1);
         }
-        if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-            close(sockfd);
+        if (bind(listener, p->ai_addr, p->ai_addrlen) == -1) {
+            close(listener);
             perror("erreur pendant bind");
             exit(1);
         }
@@ -166,67 +154,90 @@ int main() {
     }
     freeaddrinfo(servinfo);
     if (p == NULL) {
-        fprintf(stderr, "pas réussi à bind");
+        fprintf(stderr, "pas réussi à bind\n");
         exit(1);
     }
     printf("bind fait\n");
 
-    if (listen(sockfd, MAX_LOG) == -1) {
+    if (listen(listener, MAX_LOG) == -1) {
         perror("erreur pendant listen");
         exit(1);
     }
 
-    struct ThreadArgsWatch* args_watch = malloc(sizeof(struct ThreadArgsWatch));
-    args_watch->queue = queue;
-    args_watch->connfd_list = connfd_list;
-    args_watch->connfd_size = connfd_size;
-    pthread_t watch_thread;
-    pthread_create(&watch_thread, NULL, watch_queue, args_watch);
+    FD_SET(listener, &all_fds); // ajoute listener
+    fdmax = listener;
 
     printf("en attente de connexion...\n");
     while (1) {
-        sin_size = sizeof client_sa;
-        connfd = accept(sockfd, (struct sockaddr*)&client_sa, &sin_size);
-        if (connfd == -1) {
-            perror("erreur pendant accept");
-            continue;
+        read_fds = all_fds;
+
+        if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
+            perror("erreur select");
+            exit(1);
         }
 
-        if (((struct sockaddr*)&client_sa)->sa_family == AF_INET) {
-            // on a reçu une adresse ipv4
-            client_in_address = &(((struct sockaddr_in*)&client_sa)->sin_addr);
-        }
-        else {
-            // on a reçu une ipv6
-            client_in_address = &(((struct sockaddr_in6*)&client_sa)->sin6_addr);
-        }
-        inet_ntop(client_sa.ss_family, client_in_address, client_ip, sizeof client_ip);
-        printf("%s s'est connecté\n", client_ip);
+        for (int i = 0; i <= fdmax; ++i) {
+            // on parcourt tous les fd pour voir lequel est passé en ready to read
+            if (!FD_ISSET(i, &read_fds)) { // n'est pas dedans
+                continue;
+            }
 
-        if (*connfd_size >= MAX_NUMBER_CLIENT) {
-            printf("nombre maximal de clients atteint\n");
-            close(connfd);
-            continue;
+            if (i == listener) { // on a recu une nouvelle connexion
+                if (number_clients >= MAX_NUMBER_CLIENTS) {
+                    fprintf(stderr, "nombre maximal de clients atteint\n");
+                    continue;
+                }
+                addrlen = sizeof(remoteaddr);
+                newfd = accept(listener, (struct sockaddr*)&remoteaddr, &addrlen);
+                if (newfd == -1) {
+                    perror("erreur pendant accept");
+                    continue;
+                }
+                FD_SET(newfd, &all_fds);
+                number_clients++;
+                if (newfd > fdmax) {
+                    fdmax = newfd;
+                }
+                inet_ntop(remoteaddr.ss_family, get_in_addr((struct sockaddr*)&remoteaddr), remoteIP, sizeof(remoteIP));
+                printf("%s s'est connecté\n", remoteIP);
+                printf("nombre de clients : %d\n", number_clients);
+            }
+            else { // on a recu un message ou un socket s'est déco
+                if (recv(i, buf, MAX_SIZE_NAME+MAX_SIZE_MESSAGE, 0) <= 0) {
+                    close(i);
+                    FD_CLR(i, &all_fds);
+                    number_clients--;
+                    printf("déconnexion d'un client\n");
+                    printf("nombre de clients : %d\n", number_clients);
+                }
+                else {
+                    printf("réception de : ");
+                    print_ascii(buf, MAX_SIZE_NAME+MAX_SIZE_MESSAGE);
+                    if (strncmp(buf+MAX_SIZE_NAME, "exit", MAX_SIZE_MESSAGE) == 0) {
+                        // on a recu "exit" = le client veut se deco
+                        // on lui confirme
+                        send(i, buf, MAX_SIZE_NAME+MAX_SIZE_MESSAGE, 0);
+                        // et on le deco
+                        close(i);
+                        FD_CLR(i, &all_fds);
+                        number_clients--;
+                        printf("déconnexion d'un client\n");
+                        printf("nombre de clients : %d\n", number_clients);
+                    }
+                    else {
+                        // sinon on envoie le message à tout le monde
+                        printf("envoi à tout le monde\n");
+                        for (int j = 0; j <= fdmax; i=j++) {
+                            if (!FD_ISSET(j, &all_fds) || j == listener) {
+                                continue;
+                            }
+                            send(j, buf, MAX_SIZE_NAME+MAX_SIZE_MESSAGE, 0);
+                        }
+                    }
+                }
+            }
         }
-        connfd_list[*connfd_size] = connfd;
-        (*connfd_size)++;
-
-        pthread_t thread;
-        struct ThreadArgsClient* args = malloc(sizeof(struct ThreadArgsClient));
-        args->connfd = connfd;
-        args->thread_id = thread_id++;
-        args->queue = queue;
-        pthread_create(&thread, NULL, handle_client, args);
     }
-
-    pthread_cancel(watch_thread);
-    pthread_join(watch_thread, NULL);
-
-    queueDestroy(queue);
-
-    free(connfd_list);
-    free(connfd_size);
-    free(args_watch);
 
     return 0;
 }

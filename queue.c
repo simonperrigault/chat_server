@@ -7,7 +7,7 @@ Queue* queueCreate(unsigned capacity) {
     queue->capacity = capacity;
     queue->front = queue->size = 0;
     queue->rear = capacity - 1;
-    queue->array = (Message*)malloc(queue->capacity * sizeof(Message));
+    queue->array = (char**)malloc(queue->capacity * sizeof(char*));
     return queue;
 }
 
@@ -15,11 +15,11 @@ int queueIsEmpty(Queue* queue) {
     return (queue->size == 0);
 }
 
-Message queueTop(Queue* queue) {
+char* queueTop(Queue* queue) {
     return queue->array[queue->front];
 }
 
-int queueAdd(Queue* queue, Message item) {
+int queueAdd(Queue* queue, char* item) {
     if (queue->size == queue->capacity) {
         return -1;
     }
@@ -29,14 +29,15 @@ int queueAdd(Queue* queue, Message item) {
     return 0;
 }
 
-Message queueRemove(Queue* queue) {
-    Message item = queue->array[queue->front];
+char* queueRemove(Queue* queue) {
+    char* item = queue->array[queue->front];
     queue->front = (queue->front + 1) % queue->capacity;
     queue->size = queue->size - 1;
     return item;
 }
 
 void queueDestroy(Queue* queue) {
+    for (int i = 0; i < queue->size; )
     free(queue->array);
     free(queue);
 }

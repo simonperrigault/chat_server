@@ -13,9 +13,9 @@
 #include <arpa/inet.h> // htons
 #include <pthread.h>
 
-#include "queue.h"
-
 #define PORT "3114"
+#define MAX_SIZE_MESSAGE 100
+#define MAX_SIZE_NAME 20
 
 struct ThreadArgsRecv {
     int sockfd;
@@ -23,6 +23,7 @@ struct ThreadArgsRecv {
 
 struct ThreadArgsSend {
     int sockfd;
+    char name[MAX_SIZE_NAME];
 };
 
 void* handle_recv(void* arg) {
@@ -43,7 +44,12 @@ void* handle_recv(void* arg) {
     while (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len) == 0 &&
             error == 0 && 
             strcmp(message, "exit") != 0) {
-        recv(sockfd, buf, MAX_SIZE_MESSAGE+MAX_SIZE_NAME, 0);
+
+        if (recv(sockfd, buf, MAX_SIZE_MESSAGE+MAX_SIZE_NAME, 0) == 0) {
+            printf("connexion fermée\n");
+            free(args);
+            return NULL;
+        }
         strncpy(name, buf, MAX_SIZE_NAME);
         strncpy(message, buf+MAX_SIZE_NAME, MAX_SIZE_MESSAGE);
         printf("%s : %s\n", name, message);
@@ -51,10 +57,27 @@ void* handle_recv(void* arg) {
         memset(buf, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
     }
 
+    free(args);
     return NULL;
 }
 
 void* handle_send(void* arg) {
+    struct ThreadArgsSend* args = (struct ThreadArgsSend*)arg;
+    int sockfd = args->sockfd;
+
+    char buf[MAX_SIZE_NAME+MAX_SIZE_MESSAGE];
+    memset(buf, '\0', MAX_SIZE_NAME+MAX_SIZE_MESSAGE);
+    strcpy(buf, args->name);
+
+    while (1) {
+        fgets(buf+MAX_SIZE_NAME, MAX_SIZE_MESSAGE, stdin);
+        buf[MAX_SIZE_NAME+strlen(buf+MAX_SIZE_NAME)-1] = '\0';
+
+        send(sockfd, buf, MAX_SIZE_NAME+MAX_SIZE_MESSAGE, 0);
+
+        memset(buf+MAX_SIZE_NAME, '\0', MAX_SIZE_MESSAGE);
+    }
+
     return NULL;
 }
 
@@ -103,7 +126,7 @@ int main(int argc, char* argv[]) {
         serv_ip = &((struct sockaddr_in6*)(p->ai_addr))->sin6_addr;
     }
     inet_ntop(p->ai_family, serv_ip, server_inet, sizeof(server_inet));
-    printf("client connecting to %s\n", server_inet);
+    printf("Connexion à %s\n", server_inet);
 
     freeaddrinfo(server_addr);
 
@@ -111,17 +134,20 @@ int main(int argc, char* argv[]) {
 
     struct ThreadArgsSend* args_send = (struct ThreadArgsSend*)malloc(sizeof(struct ThreadArgsSend));
     args_send->sockfd = sockfd;
+    printf("Entrez votre nom : ");
+    fgets(args_send->name, MAX_SIZE_NAME, stdin);
+    args_send->name[strlen(args_send->name)-1] = '\0';
     pthread_create(&thread_send, NULL, handle_send, args_send);
 
     struct ThreadArgsRecv* args_recv = (struct ThreadArgsRecv*)malloc(sizeof(struct ThreadArgsRecv));
     args_recv->sockfd = sockfd;
     pthread_create(&thread_recv, NULL, handle_recv, args_recv);
 
-    send(sockfd, "Simon\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0salut", 26, 0);
-
     pthread_join(thread_recv, NULL);
     pthread_cancel(thread_send);
     pthread_join(thread_send, NULL);
+
+    free(args_send);
 
     close(sockfd);
 
