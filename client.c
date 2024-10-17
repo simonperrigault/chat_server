@@ -17,96 +17,49 @@
 #define MAX_SIZE_MESSAGE 100
 #define MAX_SIZE_NAME 20
 
-struct ThreadArgsRecv {
-    int sockfd;
-};
 
-struct ThreadArgsSend {
-    int sockfd;
-    char name[MAX_SIZE_NAME];
-};
-
-void* handle_recv(void* arg) {
-    struct ThreadArgsRecv* args = (struct ThreadArgsRecv*) arg;
-    int sockfd = args->sockfd;
-
-    char name[MAX_SIZE_NAME];
-    memset(name, '\0', MAX_SIZE_NAME);
-    char message[MAX_SIZE_MESSAGE];
-    memset(message, '\0', MAX_SIZE_MESSAGE);
-
-    char buf[MAX_SIZE_MESSAGE+MAX_SIZE_NAME];
-    memset(buf, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
-
-    int error = 0;
-    socklen_t len = sizeof (error);
-
-    while (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len) == 0 &&
-            error == 0 && 
-            strcmp(message, "exit") != 0) {
-
-        if (recv(sockfd, buf, MAX_SIZE_MESSAGE+MAX_SIZE_NAME, 0) == 0) {
-            printf("connexion fermée\n");
-            free(args);
-            return NULL;
-        }
-        strncpy(name, buf, MAX_SIZE_NAME);
-        strncpy(message, buf+MAX_SIZE_NAME, MAX_SIZE_MESSAGE);
-        printf("%s : %s\n", name, message);
-
-        memset(buf, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
+void *get_in_addr(struct sockaddr *sa)
+{
+    if (sa->sa_family == AF_INET) {
+        return &(((struct sockaddr_in*)sa)->sin_addr);
     }
-
-    free(args);
-    return NULL;
-}
-
-void* handle_send(void* arg) {
-    struct ThreadArgsSend* args = (struct ThreadArgsSend*)arg;
-    int sockfd = args->sockfd;
-
-    char buf[MAX_SIZE_NAME+MAX_SIZE_MESSAGE];
-    memset(buf, '\0', MAX_SIZE_NAME+MAX_SIZE_MESSAGE);
-    strcpy(buf, args->name);
-
-    while (1) {
-        fgets(buf+MAX_SIZE_NAME, MAX_SIZE_MESSAGE, stdin);
-        buf[MAX_SIZE_NAME+strlen(buf+MAX_SIZE_NAME)-1] = '\0';
-
-        send(sockfd, buf, MAX_SIZE_NAME+MAX_SIZE_MESSAGE, 0);
-
-        memset(buf+MAX_SIZE_NAME, '\0', MAX_SIZE_MESSAGE);
-    }
-
-    return NULL;
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
 int main(int argc, char* argv[]) {
-    int sockfd;
-    struct addrinfo hints, *server_addr, *p;
+    int remotefd;
+    struct addrinfo hints, *servinfo, *p;
     int rv;
-    char server_inet[INET6_ADDRSTRLEN];
+    char serverIP[INET6_ADDRSTRLEN];
+
+    char buf_recv[MAX_SIZE_NAME+MAX_SIZE_MESSAGE];
+    memset(buf_recv, '\0', MAX_SIZE_NAME+MAX_SIZE_MESSAGE);
+
+    char buf_send[MAX_SIZE_NAME+MAX_SIZE_MESSAGE];
+    memset(buf_send, '\0', MAX_SIZE_NAME+MAX_SIZE_MESSAGE);
+
+    fd_set read_fds;
 
     if (argc != 2) {
-        fprintf(stderr, "Usage : client hostname\n");
+        fprintf(stderr, "Usage : client <hostname>\n");
         exit(1);
     }
 
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
-    if ((rv = getaddrinfo(argv[1], PORT, &hints, &server_addr)) != 0) {
+    if ((rv = getaddrinfo(argv[1], PORT, &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo : %s\n", gai_strerror(rv));
         exit(1);
     }
     printf("adresse du serveur récupérée\n");
 
-    for (p = server_addr; p != NULL; p = p->ai_next) {
-        if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+    for (p = servinfo; p != NULL; p = p->ai_next) {
+        if ((remotefd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
             perror("erreur socket");
             continue;
         }
 
-        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+        if (connect(remotefd, p->ai_addr, p->ai_addrlen) == -1) {
             perror("erreur connect");
             continue;
         }
@@ -118,38 +71,50 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    void* serv_ip;
-    if (p->ai_addr->sa_family == AF_INET) {
-        serv_ip = &((struct sockaddr_in*)(p->ai_addr))->sin_addr;
-    }
-    else {
-        serv_ip = &((struct sockaddr_in6*)(p->ai_addr))->sin6_addr;
-    }
-    inet_ntop(p->ai_family, serv_ip, server_inet, sizeof(server_inet));
-    printf("Connexion à %s\n", server_inet);
+    inet_ntop(p->ai_family, get_in_addr((struct sockaddr*)&(p->ai_addr)), serverIP, sizeof(serverIP));
+    printf("Connexion à %s\n", serverIP);
 
-    freeaddrinfo(server_addr);
+    freeaddrinfo(servinfo);
 
-    pthread_t thread_send, thread_recv;
-
-    struct ThreadArgsSend* args_send = (struct ThreadArgsSend*)malloc(sizeof(struct ThreadArgsSend));
-    args_send->sockfd = sockfd;
     printf("Entrez votre nom : ");
-    fgets(args_send->name, MAX_SIZE_NAME, stdin);
-    args_send->name[strlen(args_send->name)-1] = '\0';
-    pthread_create(&thread_send, NULL, handle_send, args_send);
+    fgets(buf_send, MAX_SIZE_NAME, stdin);
+    buf_send[strlen(buf_send)-1] = '\0';
 
-    struct ThreadArgsRecv* args_recv = (struct ThreadArgsRecv*)malloc(sizeof(struct ThreadArgsRecv));
-    args_recv->sockfd = sockfd;
-    pthread_create(&thread_recv, NULL, handle_recv, args_recv);
+    while (1) {
+        FD_ZERO(&read_fds);
+        FD_SET(STDIN_FILENO, &read_fds);
+        FD_SET(remotefd, &read_fds);
 
-    pthread_join(thread_recv, NULL);
-    pthread_cancel(thread_send);
-    pthread_join(thread_send, NULL);
+        if (select(remotefd+1, &read_fds, NULL, NULL, NULL) == -1) {
+            perror("erreur select");
+            break;
+        }
 
-    free(args_send);
+        if (FD_ISSET(STDIN_FILENO, &read_fds)) {
+            fgets(buf_send+MAX_SIZE_NAME, MAX_SIZE_MESSAGE, stdin);
+            buf_send[MAX_SIZE_NAME+strlen(buf_send+MAX_SIZE_NAME)-1] = '\0';
 
-    close(sockfd);
+            send(remotefd, buf_send, MAX_SIZE_NAME+MAX_SIZE_MESSAGE, 0);
+
+            memset(buf_send+MAX_SIZE_NAME, '\0', MAX_SIZE_MESSAGE);
+        }
+
+        if (FD_ISSET(remotefd, &read_fds)) {
+            if (recv(remotefd, buf_recv, MAX_SIZE_MESSAGE+MAX_SIZE_NAME, 0) <= 0) {
+                printf("connexion fermée par le serveur\n");
+                break;
+            }
+            if (strncmp(buf_recv+MAX_SIZE_NAME, "exit", MAX_SIZE_MESSAGE) == 0) {
+                printf("déconnexion\n");
+                break;
+            }
+            printf("%s : %s\n", buf_recv, buf_recv+MAX_SIZE_NAME);
+
+            memset(buf_recv, '\0', MAX_SIZE_MESSAGE+MAX_SIZE_NAME);
+        }
+    }
+
+    close(remotefd);
 
     return 0;
 }
