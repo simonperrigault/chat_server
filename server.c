@@ -45,6 +45,8 @@ int main() {
     int listener, newfd;
     // listen sur listener et accept les nouvelles connexions sur newfd
 
+    int serveur_en_marche = 1;
+
     struct addrinfo hints, *servinfo, *p;
     // hints pour avoir infos sur soi-même, qui vont aller dans ervinfo
     // p va servir à parcourir les servinfo proposés pour voir lequel on arrive à bind
@@ -112,10 +114,11 @@ int main() {
     }
 
     FD_SET(listener, &all_fds); // ajoute listener
+    FD_SET(STDIN_FILENO, &all_fds); // pour gérer la fin du programme
     fdmax = listener;
 
     printf("en attente de connexion...\n");
-    while (1) {
+    while (serveur_en_marche) {
         read_fds = all_fds;
 
         if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
@@ -129,7 +132,16 @@ int main() {
                 continue;
             }
 
-            if (i == listener) { // on a recu une nouvelle connexion
+            if (i == STDIN_FILENO) {
+                fgets(buf, MAX_SIZE_NAME+MAX_SIZE_MESSAGE, stdin);
+                if (strncmp(buf, "exit\n", MAX_SIZE_NAME+MAX_SIZE_MESSAGE) == 0) {
+                    printf("fermeture du serveur\n");
+                    serveur_en_marche = 0;
+                    break;
+                }
+            }
+
+            else if (i == listener) { // on a recu une nouvelle connexion
                 if (number_clients >= MAX_NUMBER_CLIENTS) {
                     fprintf(stderr, "nombre maximal de clients atteint\n");
                     continue;
@@ -149,6 +161,7 @@ int main() {
                 printf("%s s'est connecté\n", remoteIP);
                 printf("nombre de clients : %d\n", number_clients);
             }
+
             else { // on a recu un message ou un socket s'est déco
                 if (recv(i, buf, MAX_SIZE_NAME+MAX_SIZE_MESSAGE, 0) <= 0) {
                     close(i);
@@ -184,6 +197,14 @@ int main() {
                 }
             }
         }
+    }
+
+    for (int i = 0; i <= fdmax; i++) {
+        if (!FD_ISSET(i, &all_fds) || i == STDIN_FILENO) {
+            continue;
+        }
+
+        close(i);
     }
 
     close(listener);

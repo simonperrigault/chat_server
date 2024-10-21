@@ -71,7 +71,7 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    inet_ntop(p->ai_family, get_in_addr((struct sockaddr*)&(p->ai_addr)), serverIP, sizeof(serverIP));
+    inet_ntop(p->ai_family, get_in_addr((struct sockaddr*)&p), serverIP, sizeof(serverIP));
     printf("Connexion à %s\n", serverIP);
 
     freeaddrinfo(servinfo);
