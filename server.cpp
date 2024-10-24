@@ -4,8 +4,7 @@
 #include <ncurses.h>
 #include <netinet/in.h>
 #include <netdb.h>
-#include <string>
-#include <cstring> // for memset
+#include <cstring> // pour memset
 #include <set>
 
 constexpr int MAX_SIZE_NAME = 20;
@@ -17,13 +16,13 @@ constexpr int MAX_CLIENTS = 10;
 
 class ChatServer {
 public:
-    ChatServer() : listener(), fd_max(), fd_list({STDIN_FILENO}), servaddr(), all_fds(), read_fds()
+    ChatServer() : m_listener(), m_fd_max(), m_fd_list({STDIN_FILENO}), m_servaddr(), m_all_fds(), m_read_fds()
     {
-        FD_ZERO(&all_fds);
-        FD_ZERO(&read_fds);
+        FD_ZERO(&m_all_fds);
+        FD_ZERO(&m_read_fds);
 
-        FD_SET(STDIN_FILENO, &all_fds);
-        fd_max = STDIN_FILENO;
+        FD_SET(STDIN_FILENO, &m_all_fds);
+        m_fd_max = STDIN_FILENO;
     }
 
     int start() {
@@ -34,37 +33,37 @@ public:
         hints.ai_socktype = SOCK_STREAM;
         hints.ai_flags = AI_PASSIVE;
 
-        if (getaddrinfo(nullptr, PORT, &hints, &servaddr) != 0) {
+        if (getaddrinfo(nullptr, PORT, &hints, &m_servaddr) != 0) {
             return 2; // pas de errno donc on différencie
         }
-        for (p = servaddr; p != nullptr; p = p->ai_next) {
-            if ((listener = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+        for (p = m_servaddr; p != nullptr; p = p->ai_next) {
+            if ((m_listener = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
                 continue;
             }
 
-            if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1) {
-                close(listener);
+            if (setsockopt(m_listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1) {
+                close(m_listener);
                 continue;
             }
 
-            if (bind(listener, p->ai_addr, p->ai_addrlen) == -1) {
-                close(listener);
+            if (bind(m_listener, p->ai_addr, p->ai_addrlen) == -1) {
+                close(m_listener);
                 continue;
             }
 
             break;
         }
-        freeaddrinfo(servaddr);
+        freeaddrinfo(m_servaddr);
         if (p == nullptr) { // pas trouvé de bonne adresse
             return 3;
         }
 
-        if (listen(listener, MAX_LOG) != 0) {
+        if (listen(m_listener, MAX_LOG) != 0) {
             return 1;
         }
-        FD_SET(listener, &all_fds);
-        fd_list.insert(listener);
-        fd_max = std::max(fd_max, listener);
+        FD_SET(m_listener, &m_all_fds);
+        m_fd_list.insert(m_listener);
+        m_fd_max = std::max(m_fd_max, m_listener);
 
         return 0;
     }
@@ -78,14 +77,14 @@ public:
         socklen_t addrlen;
 
         while (running) {
-            read_fds = all_fds;
+            m_read_fds = m_all_fds;
 
-            if (select(fd_max+1, &read_fds, nullptr, nullptr, nullptr) == -1) {
+            if (select(m_fd_max+1, &m_read_fds, nullptr, nullptr, nullptr) == -1) {
                 return 1;
             }
 
-            for (int fd : fd_list) {
-                if (!FD_ISSET(fd, &read_fds)) {
+            for (int fd : m_fd_list) {
+                if (!FD_ISSET(fd, &m_read_fds)) {
                     continue;
                 }
 
@@ -98,19 +97,19 @@ public:
                     }
                 }
 
-                else if (fd == listener) {
-                    if ((remote_fd = accept(listener, (struct sockaddr*)&remote_addr, &addrlen)) == -1) {
+                else if (fd == m_listener) {
+                    if ((remote_fd = accept(m_listener, (struct sockaddr*)&remote_addr, &addrlen)) == -1) {
                         perror("Erreur pendant accept");
                     }
 
-                    if (fd_list.size()-1 >= MAX_CLIENTS) {
+                    if (m_fd_list.size()-1 >= MAX_CLIENTS) {
                         std::cerr << "Nombre maximal de clients atteint\n";
                         break;
                     }
 
-                    FD_SET(remote_fd, &all_fds);
-                    fd_list.insert(remote_fd);
-                    fd_max = std::max(fd_max, remote_fd);
+                    FD_SET(remote_fd, &m_all_fds);
+                    m_fd_list.insert(remote_fd);
+                    m_fd_max = std::max(m_fd_max, remote_fd);
                     std::cout << "Nouvelle connexion\n";
                 }
 
@@ -123,8 +122,8 @@ public:
                         }
                         if (return_val == 0) {
                             close(fd);
-                            FD_CLR(fd, &all_fds);
-                            fd_list.erase(fd);
+                            FD_CLR(fd, &m_all_fds);
+                            m_fd_list.erase(fd);
                             std::cout << "Un client s'est déconnecté\n";
                             break;
                         }
@@ -137,14 +136,14 @@ public:
                             perror("Erreur pendant send");
                         }
                         close(fd);
-                        FD_CLR(fd, &all_fds);
-                        fd_list.erase(fd);
+                        FD_CLR(fd, &m_all_fds);
+                        m_fd_list.erase(fd);
                         std::cout << "Un client s'est déconnecté\n";
                         break;
                     }
 
-                    for (int dest : fd_list) {
-                        if (dest == STDIN_FILENO || dest == listener) {
+                    for (int dest : m_fd_list) {
+                        if (dest == STDIN_FILENO || dest == m_listener) {
                             continue;
                         }
 
@@ -160,17 +159,17 @@ public:
     }
 
     virtual ~ChatServer() {
-        for (int fd : fd_list) {
+        for (int fd : m_fd_list) {
             close(fd);
         }
     }
 private:
-    int listener;
-    int fd_max;
-    std::set<int> fd_list;
-    struct addrinfo *servaddr;
-    fd_set all_fds;
-    fd_set read_fds;
+    int m_listener;
+    int m_fd_max;
+    std::set<int> m_fd_list;
+    struct addrinfo *m_servaddr;
+    fd_set m_all_fds;
+    fd_set m_read_fds;
 };
 
 int main() {
