@@ -3,6 +3,7 @@
 #include <ncurses.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <errno.h>
 
 #include <cstring>
 #include <set>
@@ -207,17 +208,18 @@ int main() {
     WINDOW* window = initscr();
     noecho();
     cbreak();
+    curs_set(0);
 
     {
         ChatServer server(window);
 
         if ((return_val = server.start()) != 0) {
-            wprintw(window, "Erreur pendant le démarrage");
+            wprintw(window, "Erreur pendant le démarrage : %s", strerror(errno));
             sauter_ligne_curseur(window);
         }
         else {
             if ((return_val = server.run()) != 0) {
-                wprintw(window, "Erreur pendant le démarrage");
+                wprintw(window, "Erreur pendant la boucle principale : %s", strerror(errno));
                 sauter_ligne_curseur(window);
             }
         }
