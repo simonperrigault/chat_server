@@ -44,7 +44,7 @@ public:
         hints.ai_flags = AI_PASSIVE;
 
         if (getaddrinfo(nullptr, PORT, &hints, &m_servaddr) != 0) {
-            return 2; // pas de errno donc on différencie
+            return 2;
         }
         for (p = m_servaddr; p != nullptr; p = p->ai_next) {
             if ((m_listener = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {

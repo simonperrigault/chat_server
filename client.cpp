@@ -52,7 +52,7 @@ public:
         hints.ai_socktype = SOCK_STREAM;
 
         if (getaddrinfo(m_remote_ip, m_port, &hints, &m_servaddr) != 0) {
-            return 2; // pas de errno donc on différencie
+            return 2;
         }
         for (p = m_servaddr; p != nullptr; p = p->ai_next) {
             if ((m_remote_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
@@ -83,7 +83,7 @@ public:
         char buffer_send[MAX_SIZE_BUFFER];
         int curr_char;
 
-        memset(buffer_send, '\0', MAX_SIZE_NAME);
+        memset(buffer_send, '\0', MAX_SIZE_BUFFER);
         ajouter_message("Entrez votre nom : ");
         draw_messages();
         draw_input("");
@@ -92,9 +92,6 @@ public:
                 if (strlen(buffer_send) > 0) {
                     buffer_send[strlen(buffer_send)-1] = '\0';
                 }
-            }
-            else if (curr_char < 32 || curr_char > 126) {
-                continue;
             }
             else if (strlen(buffer_send) >= MAX_SIZE_NAME-1) {
                 continue;
@@ -106,6 +103,7 @@ public:
         }
         buffer_send[MAX_SIZE_NAME-1] = '\0';
 
+        flushinp();
         m_old_messages.clear();
         draw_messages();
         draw_input("");
@@ -134,9 +132,6 @@ public:
                             ajouter_message("Erreur pendant l'envoi");
                         }
                         memset(buffer_send+MAX_SIZE_NAME, '\0', MAX_SIZE_MESSAGE);
-                    }
-                    else if (curr_char < 32 || curr_char > 126) {
-                        continue;
                     }
                     else if (strlen(buffer_send+MAX_SIZE_NAME) >= MAX_SIZE_MESSAGE-1) {
                         continue;
@@ -210,7 +205,6 @@ private:
     void draw_input(const char* message) {
         werase(m_input_window);
         box(m_input_window, 0, 0);
-        mvwprintw(m_input_window, 0, 2, "Entrez votre message");
         mvwprintw(m_input_window, 1, 1, "%s", message);
         wrefresh(m_input_window);
     }
