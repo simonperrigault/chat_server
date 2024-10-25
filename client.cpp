@@ -1,10 +1,11 @@
-#include <iostream>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <ncurses.h>
 #include <netinet/in.h>
 #include <netdb.h>
-#include <cstring> // for memset
+
+#include <iostream>
+#include <cstring>
 
 constexpr int MAX_SIZE_NAME = 20;
 constexpr int MAX_SIZE_MESSAGE = 100;
@@ -14,7 +15,9 @@ constexpr int MAX_CLIENTS = 10;
 
 class ChatClient {
 public:
-    ChatClient(const char* ip, const char* port) : m_remote_fd(), m_remote_ip(), m_port(), m_servaddr(), m_all_fds(), m_read_fds()
+    ChatClient(const char* ip, const char* port)
+        : m_remote_fd(), m_remote_ip(), m_port(),
+        m_servaddr(), m_all_fds(), m_read_fds()
     {
         FD_ZERO(&m_all_fds);
         FD_ZERO(&m_read_fds);
