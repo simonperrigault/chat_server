@@ -5,7 +5,6 @@
 #include <netdb.h>
 #include <errno.h>
 
-#include <cstdlib>
 #include <cstring>
 #include <vector>
 #include <string>
@@ -13,8 +12,6 @@
 constexpr int MAX_SIZE_NAME = 20;
 constexpr int MAX_SIZE_MESSAGE = 100;
 constexpr int MAX_SIZE_BUFFER = MAX_SIZE_NAME+MAX_SIZE_MESSAGE;
-constexpr int MAX_LOG = 10;
-constexpr int MAX_CLIENTS = 10;
 
 void sauter_ligne_curseur(WINDOW* window) {
     int x,y;
@@ -103,7 +100,6 @@ public:
         }
         buffer_send[MAX_SIZE_NAME-1] = '\0';
 
-        flushinp();
         m_old_messages.clear();
         draw_messages();
         draw_input("");
@@ -177,6 +173,7 @@ public:
     }
 
     virtual ~ChatClient() {
+        werase(m_window);
         wprintw(m_window, "Fermeture du client");
         sauter_ligne_curseur(m_window);
         close(m_remote_fd);
@@ -221,7 +218,6 @@ int main(int argc, char* argv[]) {
     WINDOW* window = initscr();
     noecho();
     cbreak();
-    // curs_set(0);
 
     if (argc != 3) {
         wprintw(window, "Usage : ./client <server_ip> <port>");
